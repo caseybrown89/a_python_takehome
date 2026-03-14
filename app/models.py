@@ -11,7 +11,7 @@ from app import db
 # We use @abstractmethod without ABC as a convention-based interface instead.
 class Ingestible:
     @abstractmethod
-    def process(self):
+    def process(self) -> tuple[int, int]:
         """Persist this record. Returns (inserted_count, updated_count)."""
         ...
 

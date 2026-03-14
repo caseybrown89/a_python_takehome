@@ -16,7 +16,6 @@ from app.models import Trade, Position
 
 class IngestionError(Exception):
     """Raised when a file cannot be ingested."""
-    pass
 
 
 # ---------------------------------------------------------------------------
@@ -362,28 +361,6 @@ def reconcile(date):
     Uses a FULL OUTER JOIN between aggregated trades and positions to detect
     mismatches, missing records on either side, all in a single query.
     """
-    # Subquery: aggregate trades by account + ticker for the date
-    trade_agg = db.session.query(
-        Trade.account_id,
-        Trade.ticker,
-        func.sum(Trade.quantity).label("trade_quantity"),
-        func.sum(Trade.market_value).label("trade_value"),
-    ).filter(
-        Trade.trade_date == date,
-    ).group_by(
-        Trade.account_id, Trade.ticker,
-    ).subquery()
-
-    # Subquery: positions for the date
-    pos_q = db.session.query(
-        Position.account_id,
-        Position.ticker,
-        Position.shares.label("position_quantity"),
-        Position.market_value.label("position_value"),
-    ).filter(
-        Position.report_date == date,
-    ).subquery()
-
     # FULL OUTER JOIN via raw SQL (SQLAlchemy Core doesn't have a clean
     # full outer join API for subqueries)
     query = text("""
