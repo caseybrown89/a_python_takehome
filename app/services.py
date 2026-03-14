@@ -364,6 +364,21 @@ def reconcile(date):
     # FULL OUTER JOIN via raw SQL (SQLAlchemy Core doesn't have a clean
     # full outer join API for subqueries)
     query = text("""
+        WITH agg_trades AS (
+            SELECT account_id, ticker,
+                   SUM(quantity) AS trade_quantity,
+                   SUM(market_value) AS trade_value
+            FROM trade
+            WHERE trade_date = :date
+            GROUP BY account_id, ticker
+        ),
+        positions AS (
+            SELECT account_id, ticker,
+                   shares AS position_quantity,
+                   market_value AS position_value
+            FROM position
+            WHERE report_date = :date
+        )
         SELECT
             COALESCE(t.account_id, p.account_id) AS account_id,
             COALESCE(t.ticker, p.ticker) AS ticker,
@@ -371,21 +386,9 @@ def reconcile(date):
             p.position_quantity,
             t.trade_value,
             p.position_value
-        FROM (
-            SELECT account_id, ticker,
-                   SUM(quantity) AS trade_quantity,
-                   SUM(market_value) AS trade_value
-            FROM trade
-            WHERE trade_date = :date
-            GROUP BY account_id, ticker
-        ) t
-        FULL OUTER JOIN (
-            SELECT account_id, ticker,
-                   shares AS position_quantity,
-                   market_value AS position_value
-            FROM position
-            WHERE report_date = :date
-        ) p ON t.account_id = p.account_id AND t.ticker = p.ticker
+        FROM agg_trades t
+        FULL OUTER JOIN positions p
+            ON t.account_id = p.account_id AND t.ticker = p.ticker
         WHERE t.trade_quantity IS NULL
            OR p.position_quantity IS NULL
            OR t.trade_quantity != p.position_quantity
