@@ -4,8 +4,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 import yaml
-from sqlalchemy import any_, case, func, literal_column, text
-from sqlalchemy.dialects.postgresql import ARRAY, insert as pg_insert
+from sqlalchemy import func, text
 
 from app import db
 from app.models import Trade, Position
@@ -91,43 +90,9 @@ def ingest_file(filename, content, strict=False):
     inserted = 0
     updated = 0
     for record in records:
-        if isinstance(record, Trade):
-            stmt = pg_insert(Trade).values(
-                trade_date=record.trade_date,
-                account_id=record.account_id,
-                ticker=record.ticker,
-                quantity=record.quantity,
-                price=record.price,
-                market_value=record.market_value,
-                trade_type=record.trade_type,
-                settlement_date=record.settlement_date,
-                custodian=record.custodian,
-                source_file=record.source_file,
-            )
-            new_filename = stmt.excluded.source_file[1]  # PG arrays are 1-indexed
-            stmt = stmt.on_conflict_do_update(
-                constraint='uq_trade_natural_key',
-                set_={
-                    'settlement_date': func.coalesce(
-                        stmt.excluded.settlement_date, Trade.settlement_date
-                    ),
-                    'custodian': func.coalesce(
-                        stmt.excluded.custodian, Trade.custodian
-                    ),
-                    'source_file': case(
-                        (new_filename == any_(Trade.source_file), Trade.source_file),
-                        else_=func.array_append(Trade.source_file, new_filename),
-                    ),
-                },
-            ).returning(literal_column('(xmax = 0)').label('was_inserted'))
-            was_inserted = db.session.execute(stmt).scalar()
-            if was_inserted:
-                inserted += 1
-            else:
-                updated += 1
-        else:
-            db.session.add(record)
-            inserted += 1
+        ins, upd = record.process()
+        inserted += ins
+        updated += upd
     db.session.commit()
 
     return {

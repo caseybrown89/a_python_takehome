@@ -1,6 +1,19 @@
-from sqlalchemy.dialects.postgresql import ARRAY
+from abc import abstractmethod
+
+from sqlalchemy import any_, case, func, literal_column
+from sqlalchemy.dialects.postgresql import ARRAY, insert as pg_insert
 
 from app import db
+
+
+# Note: Ingestible cannot inherit from ABC directly because db.Model uses
+# SQLAlchemy's DeclarativeMeta metaclass, which conflicts with ABCMeta.
+# We use @abstractmethod without ABC as a convention-based interface instead.
+class Ingestible:
+    @abstractmethod
+    def process(self):
+        """Persist this record. Returns (inserted_count, updated_count)."""
+        ...
 
 # Note: Tables are created via db.create_all() in the app factory, which only
 # handles initial creation -- it cannot alter existing tables. In a production
@@ -8,7 +21,7 @@ from app import db
 # through versioned migration scripts.
 
 
-class Trade(db.Model):
+class Trade(db.Model, Ingestible):
     __tablename__ = "trade"
     __table_args__ = (
         db.UniqueConstraint(
@@ -29,8 +42,40 @@ class Trade(db.Model):
     custodian = db.Column(db.String(50), nullable=True)
     source_file = db.Column(ARRAY(db.String(50)), nullable=False)
 
+    def process(self):
+        stmt = pg_insert(Trade).values(
+            trade_date=self.trade_date,
+            account_id=self.account_id,
+            ticker=self.ticker,
+            quantity=self.quantity,
+            price=self.price,
+            market_value=self.market_value,
+            trade_type=self.trade_type,
+            settlement_date=self.settlement_date,
+            custodian=self.custodian,
+            source_file=self.source_file,
+        )
+        new_filename = stmt.excluded.source_file[1]
+        stmt = stmt.on_conflict_do_update(
+            constraint='uq_trade_natural_key',
+            set_={
+                'settlement_date': func.coalesce(
+                    stmt.excluded.settlement_date, Trade.settlement_date
+                ),
+                'custodian': func.coalesce(
+                    stmt.excluded.custodian, Trade.custodian
+                ),
+                'source_file': case(
+                    (new_filename == any_(Trade.source_file), Trade.source_file),
+                    else_=func.array_append(Trade.source_file, new_filename),
+                ),
+            },
+        ).returning(literal_column('(xmax = 0)').label('was_inserted'))
+        was_inserted = db.session.execute(stmt).scalar()
+        return (1, 0) if was_inserted else (0, 1)
 
-class Position(db.Model):
+
+class Position(db.Model, Ingestible):
     __tablename__ = "position"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -40,3 +85,7 @@ class Position(db.Model):
     shares = db.Column(db.Numeric(20, 6), nullable=False)
     market_value = db.Column(db.Numeric(20, 6), nullable=False)
     custodian_ref = db.Column(db.String(50), nullable=False)
+
+    def process(self):
+        db.session.add(self)
+        return (1, 0)
