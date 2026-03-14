@@ -28,6 +28,7 @@ class Trade(db.Model, Ingestible):
             'trade_date', 'account_id', 'ticker', 'quantity', 'price', 'trade_type',
             name='uq_trade_natural_key'
         ),
+        db.Index('ix_trade_account_date', 'account_id', 'trade_date'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -77,6 +78,12 @@ class Trade(db.Model, Ingestible):
 
 class Position(db.Model, Ingestible):
     __tablename__ = "position"
+    __table_args__ = (
+        db.UniqueConstraint(
+            'report_date', 'account_id', 'ticker',
+            name='uq_position_natural_key'
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     report_date = db.Column(db.Date, nullable=False)
@@ -87,5 +94,21 @@ class Position(db.Model, Ingestible):
     custodian_ref = db.Column(db.String(50), nullable=False)
 
     def process(self):
-        db.session.add(self)
-        return (1, 0)
+        stmt = pg_insert(Position).values(
+            report_date=self.report_date,
+            account_id=self.account_id,
+            ticker=self.ticker,
+            shares=self.shares,
+            market_value=self.market_value,
+            custodian_ref=self.custodian_ref,
+        )
+        stmt = stmt.on_conflict_do_update(
+            constraint='uq_position_natural_key',
+            set_={
+                'shares': stmt.excluded.shares,
+                'market_value': stmt.excluded.market_value,
+                'custodian_ref': stmt.excluded.custodian_ref,
+            },
+        ).returning(literal_column('(xmax = 0)').label('was_inserted'))
+        was_inserted = db.session.execute(stmt).scalar()
+        return (1, 0) if was_inserted else (0, 1)

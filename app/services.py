@@ -361,8 +361,8 @@ def reconcile(date):
     Uses a FULL OUTER JOIN between aggregated trades and positions to detect
     mismatches, missing records on either side, all in a single query.
     """
-    # FULL OUTER JOIN via raw SQL (SQLAlchemy Core doesn't have a clean
-    # full outer join API for subqueries)
+    # In a world where SQL Alchemy was insufficient in its APIs, we could use
+    # raw SQL...
     query = text("""
         WITH agg_trades AS (
             SELECT account_id, ticker,

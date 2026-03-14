@@ -271,6 +271,47 @@ class TestPingRoute:
         assert resp.get_json()["status"] == "healthy"
 
 
+class TestPositionUpsert:
+
+    def test_duplicate_ingestion_no_duplicate_rows(self, db, positions_content):
+        ingest_file("positions_bank.yaml", positions_content)
+        assert Position.query.count() == 3
+        report = ingest_file("positions_bank.yaml", positions_content)
+        assert Position.query.count() == 3
+        assert report["records_ingested"] == 0
+        assert report["records_updated"] == 3
+
+    def test_value_update_on_reload(self, db, positions_content):
+        ingest_file("positions_bank.yaml", positions_content)
+        pos = Position.query.filter_by(account_id="ACC001", ticker="AAPL").first()
+        assert pos.shares == 100
+        assert pos.market_value == 18550.00
+
+        updated_content = (
+            'report_date: "20250115"\n'
+            "positions:\n"
+            '  - account_id: "ACC001"\n'
+            '    ticker: "AAPL"\n'
+            "    shares: 200\n"
+            "    market_value: 37100.00\n"
+            '    custodian_ref: "CUST_A_99999"\n'
+        )
+        ingest_file("positions_bank.yaml", updated_content)
+        pos = Position.query.filter_by(account_id="ACC001", ticker="AAPL").first()
+        assert pos.shares == 200
+        assert pos.market_value == 37100.00
+        assert pos.custodian_ref == "CUST_A_99999"
+
+    def test_insert_vs_update_counts(self, db, positions_content):
+        report1 = ingest_file("positions_bank.yaml", positions_content)
+        assert report1["records_ingested"] == 3
+        assert report1["records_updated"] == 0
+
+        report2 = ingest_file("positions_bank.yaml", positions_content)
+        assert report2["records_ingested"] == 0
+        assert report2["records_updated"] == 3
+
+
 class TestTradeUpsert:
 
     def test_duplicate_ingestion_no_duplicate_rows(self, db, format1_content):
