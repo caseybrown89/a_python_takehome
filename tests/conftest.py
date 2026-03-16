@@ -57,7 +57,7 @@ def db(app):
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def format1_content():
+def trade_format1_content():
     return (
         "TradeDate,AccountID,Ticker,Quantity,Price,TradeType,SettlementDate\n"
         "2025-01-15,ACC001,AAPL,100,185.50,BUY,2025-01-17\n"
@@ -68,7 +68,7 @@ def format1_content():
 
 
 @pytest.fixture
-def format2_content():
+def trade_format2_content():
     return (
         "REPORT_DATE|ACCOUNT_ID|SECURITY_TICKER|SHARES|MARKET_VALUE|SOURCE_SYSTEM\n"
         "20250115|ACC001|AAPL|100|18550.00|CUSTODIAN_A\n"

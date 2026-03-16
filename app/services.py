@@ -32,8 +32,8 @@ def check_health():
 # Format detection & ingestion
 # ---------------------------------------------------------------------------
 
-FORMAT_1_HEADER = "TradeDate,AccountID,Ticker,Quantity,Price,TradeType,SettlementDate"
-FORMAT_2_HEADER = "REPORT_DATE|ACCOUNT_ID|SECURITY_TICKER|SHARES|MARKET_VALUE|SOURCE_SYSTEM"
+TRADE_FORMAT_1_HEADER = "TradeDate,AccountID,Ticker,Quantity,Price,TradeType,SettlementDate"
+TRADE_FORMAT_2_HEADER = "REPORT_DATE|ACCOUNT_ID|SECURITY_TICKER|SHARES|MARKET_VALUE|SOURCE_SYSTEM"
 
 
 def detect_format(filename, content):
@@ -54,10 +54,10 @@ def detect_format(filename, content):
 
     first_line = content.split("\n", 1)[0].strip()
 
-    if first_line == FORMAT_1_HEADER:
-        return "format_1"
-    if first_line == FORMAT_2_HEADER:
-        return "format_2"
+    if first_line == TRADE_FORMAT_1_HEADER:
+        return "trade_format_1"
+    if first_line == TRADE_FORMAT_2_HEADER:
+        return "trade_format_2"
 
     raise IngestionError(
         f"Cannot detect trade format: header '{first_line}' does not match any known specification"
@@ -73,8 +73,8 @@ def ingest_file(filename, content, strict=False):
     fmt = detect_format(filename, content)
 
     parsers = {
-        "format_1": _parse_format_1,
-        "format_2": _parse_format_2,
+        "trade_format_1": _parse_trade_format_1,
+        "trade_format_2": _parse_trade_format_2,
         "positions": _parse_positions,
     }
 
@@ -115,7 +115,7 @@ def _parse_date(value, fmt="%Y-%m-%d"):
     return None
 
 
-def _parse_format_1(content, filename):
+def _parse_trade_format_1(content, filename):
     """Parse comma-delimited trade file (Format 1)."""
     records, warnings, errors = [], [], []
     reader = csv.DictReader(io.StringIO(content))
@@ -162,7 +162,7 @@ def _parse_format_1(content, filename):
     return records, warnings, errors
 
 
-def _parse_format_2(content, filename):
+def _parse_trade_format_2(content, filename):
     """Parse pipe-delimited trade file (Format 2)."""
     records, warnings, errors = [], [], []
     lines = content.strip().split("\n")

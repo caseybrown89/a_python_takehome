@@ -8,13 +8,13 @@ from app.models import Trade, Position
 
 class TestFormatDetection:
 
-    def test_detects_format_1_from_header(self):
+    def test_detects_trade_format_1_from_header(self):
         content = "TradeDate,AccountID,Ticker,Quantity,Price,TradeType,SettlementDate\n"
-        assert detect_format("trades_daily.csv", content) == "format_1"
+        assert detect_format("trades_daily.csv", content) == "trade_format_1"
 
-    def test_detects_format_2_from_header(self):
+    def test_detects_trade_format_2_from_header(self):
         content = "REPORT_DATE|ACCOUNT_ID|SECURITY_TICKER|SHARES|MARKET_VALUE|SOURCE_SYSTEM\n"
-        assert detect_format("trades_custodian.csv", content) == "format_2"
+        assert detect_format("trades_custodian.csv", content) == "trade_format_2"
 
     def test_detects_positions_from_filename(self):
         assert detect_format("positions_bank.yaml", "report_date: ...") == "positions"
@@ -28,37 +28,37 @@ class TestFormatDetection:
             detect_format("trades.csv", "Col1,Col2,Col3\n")
 
 
-class TestFormat1Ingestion:
+class TestTradeFormat1Ingestion:
 
-    def test_ingests_valid_rows(self, db, format1_content):
-        report = ingest_file("trades_f1.csv", format1_content)
+    def test_ingests_valid_rows(self, db, trade_format1_content):
+        report = ingest_file("trades_f1.csv", trade_format1_content)
         assert report["records_ingested"] == 4
         assert report["records_skipped"] == 0
 
-    def test_buy_has_positive_quantity(self, db, format1_content):
-        ingest_file("trades_f1.csv", format1_content)
+    def test_buy_has_positive_quantity(self, db, trade_format1_content):
+        ingest_file("trades_f1.csv", trade_format1_content)
         trade = Trade.query.filter_by(account_id="ACC001", ticker="AAPL").first()
         assert trade.quantity == 100
         assert trade.trade_type == "BUY"
 
-    def test_sell_has_negative_quantity(self, db, format1_content):
-        ingest_file("trades_f1.csv", format1_content)
+    def test_sell_has_negative_quantity(self, db, trade_format1_content):
+        ingest_file("trades_f1.csv", trade_format1_content)
         trade = Trade.query.filter_by(account_id="ACC003", ticker="TSLA").first()
         assert trade.quantity == -150
         assert trade.trade_type == "SELL"
 
-    def test_source_file_is_filename(self, db, format1_content):
-        ingest_file("trades_f1.csv", format1_content)
+    def test_source_file_is_filename(self, db, trade_format1_content):
+        ingest_file("trades_f1.csv", trade_format1_content)
         trade = Trade.query.first()
         assert trade.source_file == ["trades_f1.csv"]
 
-    def test_custodian_is_null(self, db, format1_content):
-        ingest_file("trades_f1.csv", format1_content)
+    def test_custodian_is_null(self, db, trade_format1_content):
+        ingest_file("trades_f1.csv", trade_format1_content)
         trade = Trade.query.first()
         assert trade.custodian is None
 
-    def test_market_value_computed(self, db, format1_content):
-        ingest_file("trades_f1.csv", format1_content)
+    def test_market_value_computed(self, db, trade_format1_content):
+        ingest_file("trades_f1.csv", trade_format1_content)
         trade = Trade.query.filter_by(account_id="ACC001", ticker="AAPL").first()
         assert trade.market_value == 100 * 185.50
 
@@ -82,30 +82,30 @@ class TestFormat1Ingestion:
         assert report["records_skipped"] == 1
 
 
-class TestFormat2Ingestion:
+class TestTradeFormat2Ingestion:
 
-    def test_ingests_valid_rows(self, db, format2_content):
-        report = ingest_file("trades_f2.csv", format2_content)
+    def test_ingests_valid_rows(self, db, trade_format2_content):
+        report = ingest_file("trades_f2.csv", trade_format2_content)
         assert report["records_ingested"] == 3
-        assert report["format_detected"] == "format_2"
+        assert report["format_detected"] == "trade_format_2"
 
-    def test_parses_yyyymmdd_date(self, db, format2_content):
-        ingest_file("trades_f2.csv", format2_content)
+    def test_parses_yyyymmdd_date(self, db, trade_format2_content):
+        ingest_file("trades_f2.csv", trade_format2_content)
         trade = Trade.query.first()
         assert str(trade.trade_date) == "2025-01-15"
 
-    def test_derives_price_from_market_value(self, db, format2_content):
-        ingest_file("trades_f2.csv", format2_content)
+    def test_derives_price_from_market_value(self, db, trade_format2_content):
+        ingest_file("trades_f2.csv", trade_format2_content)
         trade = Trade.query.filter_by(account_id="ACC001", ticker="AAPL").first()
         assert trade.price == pytest.approx(185.50)
 
-    def test_source_file_is_filename(self, db, format2_content):
-        ingest_file("trades_f2.csv", format2_content)
+    def test_source_file_is_filename(self, db, trade_format2_content):
+        ingest_file("trades_f2.csv", trade_format2_content)
         trade = Trade.query.first()
         assert trade.source_file == ["trades_f2.csv"]
 
-    def test_custodian_parsed_from_source_system_column(self, db, format2_content):
-        ingest_file("trades_f2.csv", format2_content)
+    def test_custodian_parsed_from_source_system_column(self, db, trade_format2_content):
+        ingest_file("trades_f2.csv", trade_format2_content)
         trade = Trade.query.filter_by(account_id="ACC001", ticker="AAPL").first()
         assert trade.custodian == "CUSTODIAN_A"
 
@@ -129,7 +129,7 @@ class TestPositionsIngestion:
             ingest_file("positions.yaml", "{{invalid yaml", strict=True)
 
 
-class TestFormat1EdgeCases:
+class TestTradeFormat1EdgeCases:
 
     def test_missing_required_field_skipped(self, db):
         content = (
@@ -158,7 +158,7 @@ class TestFormat1EdgeCases:
         assert report["records_skipped"] == 1
 
 
-class TestFormat2EdgeCases:
+class TestTradeFormat2EdgeCases:
 
     def test_too_few_fields_skipped(self, db):
         content = (
@@ -230,8 +230,8 @@ class TestPositionsEdgeCases:
 
 class TestIngestRoute:
 
-    def test_ingest_valid_file(self, client, db, format1_content):
-        data = {"file": (io.BytesIO(format1_content.encode()), "trades.csv")}
+    def test_ingest_valid_file(self, client, db, trade_format1_content):
+        data = {"file": (io.BytesIO(trade_format1_content.encode()), "trades.csv")}
         resp = client.post("/ingest", data=data, content_type="multipart/form-data")
         assert resp.status_code == 200
         body = resp.get_json()
@@ -314,60 +314,60 @@ class TestPositionUpsert:
 
 class TestTradeUpsert:
 
-    def test_duplicate_ingestion_no_duplicate_rows(self, db, format1_content):
-        ingest_file("trades_f1.csv", format1_content)
+    def test_duplicate_ingestion_no_duplicate_rows(self, db, trade_format1_content):
+        ingest_file("trades_f1.csv", trade_format1_content)
         assert Trade.query.count() == 4
-        report = ingest_file("trades_f1.csv", format1_content)
+        report = ingest_file("trades_f1.csv", trade_format1_content)
         assert Trade.query.count() == 4
         assert report["records_ingested"] == 0
         assert report["records_updated"] == 4
 
-    def test_format1_then_format2_merges_custodian(self, db, format1_content, format2_content):
-        ingest_file("trades_f1.csv", format1_content)
+    def test_trade_format1_then_trade_format2_merges_custodian(self, db, trade_format1_content, trade_format2_content):
+        ingest_file("trades_f1.csv", trade_format1_content)
         trade = Trade.query.filter_by(account_id="ACC001", ticker="AAPL").first()
         assert trade.custodian is None
         assert trade.settlement_date is not None
 
-        ingest_file("trades_f2.csv", format2_content)
+        ingest_file("trades_f2.csv", trade_format2_content)
         trade = Trade.query.filter_by(account_id="ACC001", ticker="AAPL").first()
         assert trade.custodian == "CUSTODIAN_A"
         assert trade.settlement_date is not None
         assert Trade.query.filter_by(account_id="ACC001", ticker="AAPL").count() == 1
 
-    def test_format2_then_format1_merges_settlement_date(self, db, format2_content, format1_content):
-        ingest_file("trades_f2.csv", format2_content)
+    def test_trade_format2_then_trade_format1_merges_settlement_date(self, db, trade_format2_content, trade_format1_content):
+        ingest_file("trades_f2.csv", trade_format2_content)
         trade = Trade.query.filter_by(account_id="ACC001", ticker="AAPL").first()
         assert trade.settlement_date is None
         assert trade.custodian == "CUSTODIAN_A"
 
-        ingest_file("trades_f1.csv", format1_content)
+        ingest_file("trades_f1.csv", trade_format1_content)
         trade = Trade.query.filter_by(account_id="ACC001", ticker="AAPL").first()
         assert trade.settlement_date is not None
         assert trade.custodian == "CUSTODIAN_A"
         assert Trade.query.filter_by(account_id="ACC001", ticker="AAPL").count() == 1
 
-    def test_report_includes_updated_count(self, db, format1_content, format2_content):
-        report1 = ingest_file("trades_f1.csv", format1_content)
+    def test_report_includes_updated_count(self, db, trade_format1_content, trade_format2_content):
+        report1 = ingest_file("trades_f1.csv", trade_format1_content)
         assert report1["records_ingested"] == 4
         assert report1["records_updated"] == 0
 
-        # format2 has 3 rows, all overlap with format1
-        report2 = ingest_file("trades_f2.csv", format2_content)
+        # trade_format2 has 3 rows, all overlap with trade_format1
+        report2 = ingest_file("trades_f2.csv", trade_format2_content)
         assert report2["records_ingested"] == 0
         assert report2["records_updated"] == 3
 
-    def test_upsert_accumulates_source_files(self, db, format1_content, format2_content):
-        ingest_file("trades_f1.csv", format1_content)
+    def test_upsert_accumulates_source_files(self, db, trade_format1_content, trade_format2_content):
+        ingest_file("trades_f1.csv", trade_format1_content)
         trade = Trade.query.filter_by(account_id="ACC001", ticker="AAPL").first()
         assert trade.source_file == ["trades_f1.csv"]
 
-        ingest_file("trades_f2.csv", format2_content)
+        ingest_file("trades_f2.csv", trade_format2_content)
         trade = Trade.query.filter_by(account_id="ACC001", ticker="AAPL").first()
         assert trade.source_file == ["trades_f1.csv", "trades_f2.csv"]
 
-    def test_upsert_does_not_duplicate_source_file(self, db, format1_content):
-        ingest_file("trades_f1.csv", format1_content)
-        ingest_file("trades_f1.csv", format1_content)
+    def test_upsert_does_not_duplicate_source_file(self, db, trade_format1_content):
+        ingest_file("trades_f1.csv", trade_format1_content)
+        ingest_file("trades_f1.csv", trade_format1_content)
         trade = Trade.query.filter_by(account_id="ACC001", ticker="AAPL").first()
         assert trade.source_file == ["trades_f1.csv"]
 
