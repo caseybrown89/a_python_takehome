@@ -2,6 +2,58 @@
 
 A Flask application that ingests trade and position data from multiple formats, reconciles discrepancies, calculates portfolio metrics, and detects compliance violations.
 
+## Requirements
+
+Build a simplified portfolio data reconciliation system that ingests trade and position data from multiple sources in different formats, reconciles discrepancies, calculates portfolio metrics, and detects compliance violations.
+
+### Key Deliverables
+
+1. Flask application code for endpoints
+2. SQLAlchemy models (database schema)
+3. Data ingestion logic with quality checks (integrated or separate script)
+4. Sample test queries or test data validating reconciliation logic
+5. Functioning unit tests
+6. GitHub repository
+7. README.md
+
+### Functional Requirements
+
+1. Ingest files of two different formats for daily trades into a single relational database table.
+2. Ingest a single format representing bank-broker positions into a second table.
+3. Provide the following Flask endpoints:
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/ingest` | POST | Load files, return data quality report (can also be a script) |
+| `/positions?account=ACC001&date=2025-01-15` | GET | Positions with cost basis and market value |
+| `/compliance/concentration?date=2025-01-15` | GET | Accounts exceeding 20% single-equity threshold with breach details |
+| `/reconciliation?date=2025-01-15` | GET | Trade vs position file discrepancies on the provided day |
+
+A compliance violation occurs when any one equity in an account holds over 20% of the value of that account.
+
+### Input Formats
+
+**Trade File Format 1** (CSV):
+```
+TradeDate,AccountID,Ticker,Quantity,Price,TradeType,SettlementDate
+```
+
+**Trade File Format 2** (pipe-delimited):
+```
+REPORT_DATE|ACCOUNT_ID|SECURITY_TICKER|SHARES|MARKET_VALUE|SOURCE_SYSTEM
+```
+
+**Bank Position Format** (YAML):
+```yaml
+report_date: "20250115"
+positions:
+  - account_id: "ACC001"
+    ticker: "AAPL"
+    shares: 100
+    market_value: 18550.00
+    custodian_ref: "CUST_A_12345"
+```
+
 ## Quick Start
 
 ```bash
