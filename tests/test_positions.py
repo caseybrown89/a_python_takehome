@@ -68,3 +68,32 @@ class TestPositionsEndpoint:
     def test_missing_date_param(self, client):
         resp = client.get("/positions?account=ACC001")
         assert resp.status_code == 400
+
+    def test_cost_basis_with_buy_and_sell(self, db):
+        """Cost basis should reflect net investment: buys minus sells."""
+        trades = (
+            "TradeDate,AccountID,Ticker,Quantity,Price,TradeType,SettlementDate\n"
+            "2025-01-10,ACC001,AAPL,100,185.50,BUY,2025-01-12\n"
+            "2025-01-14,ACC001,AAPL,30,190.00,SELL,2025-01-16\n"
+        )
+        # Position as of Jan 15: 70 shares remaining at current price
+        positions = (
+            'report_date: "20250115"\n'
+            "positions:\n"
+            '  - account_id: "ACC001"\n'
+            '    ticker: "AAPL"\n'
+            "    shares: 70\n"
+            "    market_value: 13300.00\n"
+            '    custodian_ref: "CUST_A_99999"\n'
+        )
+        ingest_file("trades.csv", trades)
+        ingest_file("positions.yaml", positions)
+
+        result = get_positions("ACC001", date(2025, 1, 15))
+        aapl = next(p for p in result["positions"] if p["ticker"] == "AAPL")
+
+        # Buy: 100 * 185.50 = 18550.00
+        # Sell: -30 * 190.00 = -5700.00  (quantity negated for sells)
+        # Net investment cost basis: 18550.00 - 5700.00 = 12850.00
+        assert aapl["cost_basis"] == 12850.00
+        assert aapl["shares"] == 70

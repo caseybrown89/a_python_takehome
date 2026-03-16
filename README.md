@@ -105,6 +105,12 @@ docker compose down && rm -rf pgdata && docker compose up --build -d
 
 PostgreSQL data is persisted in the local `pgdata/` directory via a bind mount. Removing it forces a fresh database on next startup, and tables are recreated automatically via `db.create_all()`.
 
+## Cost Basis Calculation
+
+The `/positions` endpoint reports a `cost_basis` field for each holding. This is computed as `SUM(market_value)` across all trades for the account and ticker up to the requested date. Because sells are stored with negative `market_value` (quantity is negated at ingestion, and `market_value = quantity * price`), sells naturally reduce the sum.
+
+This produces a **net investment** figure, not a traditional tax-lot cost basis. A true cost basis would track the original cost of only the shares still held, using a lot-selection method like FIFO or LIFO. For example, buying 100 shares at $10 and selling 50 at $15 yields a net-investment cost basis of $250 here, whereas a FIFO cost basis for the remaining 50 shares would be $500.
+
 ## Known Limitations
 
 - **Ingestion performs upserts on composite keys.** Trades are deduplicated on `(trade_date, account_id, ticker, quantity, price, trade_type)`; positions on `(report_date, account_id, ticker)`. When a matching trade already exists, complementary fields (`settlement_date`, `custodian`) are merged via `COALESCE` so that ingesting the same trade from multiple sources (e.g. an internal CSV and a custodian pipe-delimited file) produces a single, complete row. The ingestion report includes a `records_updated` count alongside `records_ingested`. **Caveat:** two genuinely distinct trades that share all six key fields on the same day would be erroneously merged. A production system should require source-provided unique trade identifiers to eliminate this ambiguity.
