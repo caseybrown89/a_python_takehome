@@ -85,6 +85,58 @@ class TestComplianceConcentration:
         result = check_concentration(date(2099, 1, 1))
         assert result["violations"] == []
 
+    def test_positions_from_other_dates_excluded(self, db):
+        """Only positions matching the query date should factor into concentration."""
+        jan15_positions = (
+            'report_date: "20250115"\n'
+            "positions:\n"
+            '  - account_id: "ACC050"\n'
+            '    ticker: "AAPL"\n'
+            "    shares: 100\n"
+            "    market_value: 5000.00\n"
+            '    custodian_ref: "REF1"\n'
+            '  - account_id: "ACC050"\n'
+            '    ticker: "MSFT"\n'
+            "    shares: 100\n"
+            "    market_value: 5000.00\n"
+            '    custodian_ref: "REF2"\n'
+        )
+        # A large position on a different date that would skew concentration
+        # if it leaked into the Jan 15 query
+        jan20_positions = (
+            'report_date: "20250120"\n'
+            "positions:\n"
+            '  - account_id: "ACC050"\n'
+            '    ticker: "AAPL"\n'
+            "    shares: 500\n"
+            "    market_value: 50000.00\n"
+            '    custodian_ref: "REF3"\n'
+            '  - account_id: "ACC050"\n'
+            '    ticker: "MSFT"\n'
+            "    shares: 10\n"
+            "    market_value: 500.00\n"
+            '    custodian_ref: "REF4"\n'
+        )
+        ingest_file("positions_jan15.yaml", jan15_positions)
+        ingest_file("positions_jan20.yaml", jan20_positions)
+
+        # On Jan 15, ACC050 has two equal 50/50 positions — both violate 20%
+        # but each should be exactly 50%, not skewed by Jan 20 data
+        result = check_concentration(date(2025, 1, 15))
+        acc050 = [v for v in result["violations"] if v["account_id"] == "ACC050"]
+        assert len(acc050) == 2
+        for v in acc050:
+            assert v["concentration_pct"] == 50.00
+            assert v["total_account_value"] == 10000.00
+
+        # On Jan 20, AAPL is ~99% of account — only AAPL should violate
+        # If Jan 15 data leaked in, percentages and totals would differ
+        result = check_concentration(date(2025, 1, 20))
+        acc050 = [v for v in result["violations"] if v["account_id"] == "ACC050"]
+        assert len(acc050) == 1
+        assert acc050[0]["ticker"] == "AAPL"
+        assert acc050[0]["total_account_value"] == 50500.00
+
     def test_via_http(self, client, db):
         self._seed(db)
         resp = client.get("/compliance/concentration?date=2025-01-15")

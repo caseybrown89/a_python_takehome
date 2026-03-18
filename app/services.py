@@ -369,7 +369,7 @@ def reconcile(date):
                    SUM(quantity) AS trade_quantity,
                    SUM(market_value) AS trade_value
             FROM trade
-            WHERE trade_date = :date
+            WHERE trade_date <= :date
             GROUP BY account_id, ticker
         ),
         positions AS (
