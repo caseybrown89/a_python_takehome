@@ -62,6 +62,8 @@ docker-compose up --build -d
 
 This starts PostgreSQL and the web server. The API is available at `http://localhost:5000`.
 
+> **Note:** The Docker Compose configuration exposes the PostgreSQL port to the host for local development convenience (e.g. connecting via `psql` to inspect data). This is not intended for production use. A production deployment would use proper network isolation, credentials injected from a secrets manager, and no open database ports on the host.
+
 ## API Endpoints
 
 ### GET /ping
@@ -112,7 +114,7 @@ curl "http://localhost:5000/compliance/concentration?date=2025-01-15" | python3 
 
 ### GET /reconciliation
 
-Compares aggregated trades against bank positions for a given date. Reports quantity mismatches, missing records on either side.
+Compares aggregated trades against bank positions for a given date. Trade quantities are summed across all history up to and including the requested date (reflecting cumulative holdings), then compared against the position file for that date. Reports quantity mismatches and records missing from either side.
 
 ```bash
 curl "http://localhost:5000/reconciliation?date=2025-01-15" | python3 -m json.tool
@@ -131,11 +133,13 @@ python cli.py --permissive sample_data/trades_format1.csv
 
 ## Running Tests
 
-Tests run against a PostgreSQL database (created automatically if it doesn't exist):
+Tests run against a live PostgreSQL instance (the test database is created automatically if it doesn't exist):
 
 ```bash
 docker compose run test
 ```
+
+**Why tests require Postgres:** Business logic is intentionally pushed into SQL queries (JOINs, WHERE clauses, aggregations) rather than performed in Python, because the database is highly optimized for these operations. Testing against a live Postgres instance — rather than mocking responses or substituting SQLite — ensures coverage of that SQL logic and matches the production stack. The tradeoff is that tests cannot run without the database container.
 
 Test database connection can be configured via environment variables: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_TEST_DB`.
 
