@@ -97,3 +97,33 @@ class TestPositionsEndpoint:
         # Net investment cost basis: 18550.00 - 5700.00 = 12850.00
         assert aapl["cost_basis"] == 12850.00
         assert aapl["shares"] == 70
+
+    def test_future_trades_excluded_from_cost_basis(self, db):
+        """Trades after the query date should not affect cost basis."""
+        past_trade = (
+            "TradeDate,AccountID,Ticker,Quantity,Price,TradeType,SettlementDate\n"
+            "2025-01-10,ACC001,AAPL,100,185.00,BUY,2025-01-12\n"
+        )
+        future_trade = (
+            "TradeDate,AccountID,Ticker,Quantity,Price,TradeType,SettlementDate\n"
+            "2025-01-20,ACC001,AAPL,50,200.00,BUY,2025-01-22\n"
+        )
+        positions = (
+            'report_date: "20250115"\n'
+            "positions:\n"
+            '  - account_id: "ACC001"\n'
+            '    ticker: "AAPL"\n'
+            "    shares: 100\n"
+            "    market_value: 19000.00\n"
+            '    custodian_ref: "CUST_A_001"\n'
+        )
+        ingest_file("trades_past.csv", past_trade)
+        ingest_file("trades_future.csv", future_trade)
+        ingest_file("positions.yaml", positions)
+
+        result = get_positions("ACC001", date(2025, 1, 15))
+        aapl = next(p for p in result["positions"] if p["ticker"] == "AAPL")
+
+        # Only the Jan 10 trade should count: 100 * 185.00 = 18500.00
+        # The Jan 20 trade (50 * 200.00 = 10000.00) must be excluded
+        assert aapl["cost_basis"] == 18500.00
